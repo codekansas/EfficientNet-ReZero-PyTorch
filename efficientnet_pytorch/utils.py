@@ -576,6 +576,16 @@ url_map_advprop = {
 # TODO: add the petrained weights url map of 'efficientnet-l2'
 
 
+def pop_resweights(ret):
+    i = 0
+    while i < len(ret.missing_keys):
+        key = ret.missing_keys[i]
+        if key.endswith('_resweight'):
+            ret.missing_keys.pop(i)
+        else:
+            i += 1
+
+
 def load_pretrained_weights(model, model_name, weights_path=None, load_fc=True, advprop=False):
     """Loads pretrained weights from weights path or download using url.
 
@@ -598,11 +608,13 @@ def load_pretrained_weights(model, model_name, weights_path=None, load_fc=True, 
 
     if load_fc:
         ret = model.load_state_dict(state_dict, strict=False)
+        pop_resweights(ret)
         assert not ret.missing_keys, 'Missing keys when loading pretrained weights: {}'.format(ret.missing_keys)
     else:
         state_dict.pop('_fc.weight')
         state_dict.pop('_fc.bias')
         ret = model.load_state_dict(state_dict, strict=False)
+        pop_resweights(ret)
         assert set(ret.missing_keys) == set(
             ['_fc.weight', '_fc.bias']), 'Missing keys when loading pretrained weights: {}'.format(ret.missing_keys)
     assert not ret.unexpected_keys, 'Missing keys when loading pretrained weights: {}'.format(ret.unexpected_keys)

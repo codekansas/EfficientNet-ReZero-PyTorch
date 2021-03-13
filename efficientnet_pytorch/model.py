@@ -54,6 +54,7 @@ class MBConvBlock(nn.Module):
         self._bn_eps = global_params.batch_norm_epsilon
         self.has_se = (self._block_args.se_ratio is not None) and (0 < self._block_args.se_ratio <= 1)
         self.id_skip = block_args.id_skip  # whether to use skip connection and drop connect
+        assert self.id_skip, 'ReZero requires skip connections'
 
         # Expansion phase (Inverted Bottleneck)
         inp = self._block_args.input_filters  # number of input channels
@@ -87,6 +88,7 @@ class MBConvBlock(nn.Module):
         self._project_conv = Conv2d(in_channels=oup, out_channels=final_oup, kernel_size=1, bias=False)
         self._bn2 = nn.BatchNorm2d(num_features=final_oup, momentum=self._bn_mom, eps=self._bn_eps)
         self._swish = MemoryEfficientSwish()
+        self._resweight = nn.Parameter(torch.Tensor([0]))
 
     def forward(self, inputs, drop_connect_rate=None):
         """MBConvBlock's forward function.
@@ -128,7 +130,7 @@ class MBConvBlock(nn.Module):
             # The combination of skip connection and drop connect brings about stochastic depth.
             if drop_connect_rate:
                 x = drop_connect(x, p=drop_connect_rate, training=self.training)
-            x = x + inputs  # skip connection
+            x = (x * self._resweight) + inputs
         return x
 
     def set_swish(self, memory_efficient=True):
@@ -152,8 +154,8 @@ class EfficientNet(nn.Module):
         [1] https://arxiv.org/abs/1905.11946 (EfficientNet)
 
     Example:
-        
-        
+
+
         import torch
         >>> from efficientnet.model import EfficientNet
         >>> inputs = torch.rand(1, 3, 224, 224)
