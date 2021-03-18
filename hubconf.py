@@ -4,7 +4,7 @@ dependencies = ['torch']
 
 
 def _create_model_fn(model_name):
-    def _model_fn(num_classes=1000, in_channels=3, pretrained='imagenet'):
+    def _model_fn(num_classes=1000, in_channels=3, pretrained='imagenet', rezero=False, prob=0.0):
         """Create Efficient Net.
 
         Described in detail here: https://arxiv.org/abs/1905.11946
@@ -20,6 +20,8 @@ def _create_model_fn(model_name):
                 advprop are loaded. It is important to note that the
                 preprocessing required for the advprop pretrained models is
                 slightly different from normal ImageNet preprocessing
+            rezero (bool): Whether or not to use ReZero
+            prob (float, optional): stochastic depth probability
         """
         model_name_ = model_name.replace('_', '-')
         if pretrained is not None:
@@ -27,11 +29,17 @@ def _create_model_fn(model_name):
                 model_name=model_name_,
                 advprop=(pretrained == 'advprop'),
                 num_classes=num_classes,
-                in_channels=in_channels)
+                in_channels=in_channels,
+                rezero=rezero,
+                prob=prob)
         else:
             model = _EfficientNet.from_name(
                 model_name=model_name_,
-                override_params={'num_classes': num_classes},
+                override_params={
+                    'num_classes': num_classes,
+                    'rezero': rezero,
+                    'prob': prob,
+                },
             )
             model._change_in_channels(in_channels)
 

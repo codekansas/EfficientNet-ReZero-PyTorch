@@ -88,7 +88,11 @@ class MBConvBlock(nn.Module):
         self._project_conv = Conv2d(in_channels=oup, out_channels=final_oup, kernel_size=1, bias=False)
         self._bn2 = nn.BatchNorm2d(num_features=final_oup, momentum=self._bn_mom, eps=self._bn_eps)
         self._swish = MemoryEfficientSwish()
-        self._resweight = nn.Parameter(torch.Tensor([0]))
+        if block_args.rezero:
+            self._resweight = nn.Parameter(torch.Tensor([0]))
+        else:
+            self._resweight = None
+        self._m = torch.distributions.bernoulli.Bernoulli(torch.Tensor([block_args.prob]))
 
     def forward(self, inputs, drop_connect_rate=None):
         """MBConvBlock's forward function.
@@ -101,8 +105,12 @@ class MBConvBlock(nn.Module):
             Output of this block after processing.
         """
 
+        if torch.equal(self._m.sample(), torch.ones(1)):
+            return inputs
+
         # Expansion and Depthwise Convolution
         x = inputs
+
         if self._block_args.expand_ratio != 1:
             x = self._expand_conv(inputs)
             x = self._bn0(x)
@@ -130,7 +138,10 @@ class MBConvBlock(nn.Module):
             # The combination of skip connection and drop connect brings about stochastic depth.
             if drop_connect_rate:
                 x = drop_connect(x, p=drop_connect_rate, training=self.training)
-            x = (x * self._resweight) + inputs
+            if self._resweight is not None:
+                x = (x * self._resweight) + inputs
+            else:
+                x = x + inputs
         return x
 
     def set_swish(self, memory_efficient=True):

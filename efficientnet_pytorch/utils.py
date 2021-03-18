@@ -44,7 +44,8 @@ GlobalParams = collections.namedtuple('GlobalParams', [
 # Parameters for an individual model block
 BlockArgs = collections.namedtuple('BlockArgs', [
     'num_repeat', 'kernel_size', 'stride', 'expand_ratio',
-    'input_filters', 'output_filters', 'se_ratio', 'id_skip'])
+    'input_filters', 'output_filters', 'se_ratio', 'id_skip',
+    'rezero', 'prob'])
 
 # Set GlobalParams and BlockArgs's defaults
 GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
@@ -391,7 +392,9 @@ class BlockDecoder(object):
             input_filters=int(options['i']),
             output_filters=int(options['o']),
             se_ratio=float(options['se']) if 'se' in options else None,
-            id_skip=('noskip' not in block_string))
+            id_skip=('noskip' not in block_string),
+            rezero=bool(options.get('z', False)),
+            prob=float(options.get('p', 0.0)))
 
     @staticmethod
     def _encode_block_string(block):
@@ -475,7 +478,8 @@ def efficientnet_params(model_name):
 
 
 def efficientnet(width_coefficient=None, depth_coefficient=None, image_size=None,
-                 dropout_rate=0.2, drop_connect_rate=0.2, num_classes=1000, include_top=True):
+                 dropout_rate=0.2, drop_connect_rate=0.2, num_classes=1000, include_top=True,
+                 rezero=False, prob=0.0):
     """Create BlockArgs and GlobalParams for efficientnet model.
 
     Args:
@@ -504,13 +508,16 @@ def efficientnet(width_coefficient=None, depth_coefficient=None, image_size=None
         'r1_k3_s11_e6_i192_o320_se0.25',
     ]
     blocks_args = BlockDecoder.decode(blocks_args)
+    blocks_args = [
+        BlockArgs(**{**args._asdict(), **{'rezero': rezero, 'prob': prob}})
+        for args in blocks_args
+    ]
 
     global_params = GlobalParams(
         width_coefficient=width_coefficient,
         depth_coefficient=depth_coefficient,
         image_size=image_size,
         dropout_rate=dropout_rate,
-
         num_classes=num_classes,
         batch_norm_momentum=0.99,
         batch_norm_epsilon=1e-3,
@@ -533,11 +540,16 @@ def get_model_params(model_name, override_params):
     Returns:
         blocks_args, global_params
     """
+
+    rezero = override_params.pop('rezero', False)
+    prob = override_params.pop('prob', 0.0)
+
     if model_name.startswith('efficientnet'):
         w, d, s, p = efficientnet_params(model_name)
         # note: all models have drop connect rate = 0.2
         blocks_args, global_params = efficientnet(
-            width_coefficient=w, depth_coefficient=d, dropout_rate=p, image_size=s)
+            width_coefficient=w, depth_coefficient=d, dropout_rate=p, image_size=s,
+            rezero=rezero, prob=prob)
     else:
         raise NotImplementedError('model name is not pre-defined: {}'.format(model_name))
     if override_params:
